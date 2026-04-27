@@ -8,7 +8,6 @@ output:
 
 The purpose of this folder is to practice using an application programming interface for my econometrics tutorial.
 
-
 ```{r}
 
 rm(list = ls()) # Clean your environment:
@@ -28,11 +27,6 @@ if (!require("knitr", quietly = TRUE )) {
     library(knitr)
 }
 
-if (!require("kableExtra", quietly = TRUE )) {
-    install.packages("kableExtra")
-    library(kableExtra)
-}
-
 p_load(wbstats,WDI,tidyverse,haven)
 
 list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
@@ -41,12 +35,11 @@ list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.
 # Setup
 
 ```{r}
-# Verify that the packages are ready
-library(help="WDI") # lists functions in the WDI package
-wbstats::wb_cachelist # glimpse of cached World Bank metadata
-WDI::WDI_data # explore WDI data structures
+# Verify that the packages are ready (UNCOMMENT IF YOU WANT TO)
+#library(help="WDI") # lists functions in the WDI package
+#wbstats::wb_cachelist # glimpse of cached World Bank metadata
+#WDI::WDI_data # explore WDI data structures
 ```
-
 
 # Finding Indicator Codes
 
@@ -61,7 +54,7 @@ head(gdp_indicators)
 
 # Narrow search to "GDP per capita "
 gdp_pc <- wb_search("GDP per capita")
-View(gdp_pc) #interactive table viewer in RStudio
+head(gdp_pc) #interactive table viewer in RStudio
 
 # Important columns :
  # indicator _id -> code for wb_ data ()
@@ -81,44 +74,33 @@ WDIsearch("inflation")
 The suffix of an indicator code encodes crucial information about the unit, adjustment method, and base year. Misinterpreting suffixes is a common source of errors in empirical work.
 
 ```{r}
-wb_suffixes <- tribble(
+# Create the data
+wb_data <- tribble(
   ~Suffix, ~`Meaning and Appropriate Use`,
-  ".CD", "Current USD (nominal). Affected by both inflation and exchange rate movements. Use for headline figures, single-period snapshots, or when nominal values are explicitly required.",
-  ".KD", "Constant USD (real, inflation-adjusted). Base year is usually 2015. Use for comparing growth rates over time within a country.",
-  ".PP.CD", "Purchasing Power Parity (PPP) adjusted, expressed in current international dollars. Corrects for cross-country differences in price levels. Use for comparing living standards across countries at a point in time.",
-  ".PP.KD", "PPP-adjusted, expressed in constant international dollars. Combines inflation adjustment with PPP conversion. Use for comparing growth in living standards across countries over time.",
-  ".ZS", "Percentage share (ratio). Already unit-free (e.g., trade as % of GDP, unemployment rate). Values are typically between 0 and 100.",
+  ".CD", "Current USD (nominal). Affected by both inflation and exchange rate movements.",
+  ".KD", "Constant USD (real, inflation-adjusted). Base year is usually 2015.",
+  ".PP.CD", "PPP-adjusted, current international dollars. Corrects for cross-country price levels.",
+  ".PP.KD", "PPP-adjusted, constant international dollars. Combines inflation adjustment with PPP.",
+  ".ZS", "Percentage share (ratio). Already unit-free (e.g., trade as % of GDP).",
   ".GD", "Share of GDP. Similar to .ZS but explicitly relative to GDP.",
-  ".LN", "Natural logarithm of the underlying series. Rarely used directly; often employed in internal calculations.",
-  ".MA", "Moving average or smoothed series. Indicates that the value has been smoothed over time.",
-  ".DT", "Decadal data (e.g., population census every 10 years). Check the indicator description for the exact frequency.",
-  ".AR", "Annual Report data. May differ slightly from standard series due to reporting conventions.",
-  ".EST", "Estimated value (not directly reported by the country). Used by World Bank staff to fill gaps."
+  ".LN", "Natural logarithm of the underlying series. Used in internal calculations.",
+  ".MA", "Moving average or smoothed series. Indicates values have been smoothed.",
+  ".DT", "Decadal data (e.g., population census every 10 years).",
+  ".AR", "Annual Report data. May differ from standard series due to reporting.",
+  ".EST", "Estimated value (not directly reported). Used to fill gaps."
 )
 
-# Generate the formatted table
-wb_suffixes %>%
-  kable(
-    caption = "Table 1: Comprehensive List of Common World Bank Indicator Suffixes",
-    booktabs = TRUE,
-    col.names = c("Suffix", "Meaning and Appropriate Use")
-  ) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    latex_options = c("striped", "hold_position"),
-    full_width = FALSE
-  ) %>%
-  column_spec(1, bold = TRUE, border_right = TRUE) %>%
-  column_spec(2, width = "30em")
+# Generate a Markdown-compatible table
+kable(wb_data, format = "markdown", caption = "Table 1: World Bank Indicator Suffixes")
 ```
 
 **Economist's rule of thumb**:
 
-* Coss-Country level comparison -> use .PP.CD or .PP.KD (PPP-adjusted).
+- Coss-Country level comparison -\> use .PP.CD or .PP.KD (PPP-adjusted).
 
-* Growth over time within a country -> use .KD (constant/real).
+- Growth over time within a country -\> use .KD (constant/real).
 
-* Policy reports in nominal USD -> .CD (current/nominal).
+- Policy reports in nominal USD -\> .CD (current/nominal).
 
 # Country Codes and Time Granularity
 
@@ -126,19 +108,19 @@ wb_suffixes %>%
 
 The WB API accepts both two-letter and three-letter country codes:
 
-* **ISO2**: Often used in plots and quick identification. 
+- **ISO2**: Often used in plots and quick identification.
 
-* **ISO3**: More informative and are the standard for merging with other international datasets(such as UN, IMF, or Penn Word Tables)
+- **ISO3**: More informative and are the standard for merging with other international datasets(such as UN, IMF, or Penn Word Tables)
 
 ## Time Granularity in API Calls
 
 The wbstats package automatically handles the format, but when constructing raw API calls, you must specify dates correctly:
 
-* **Annual data**: Use YYYY
+- **Annual data**: Use YYYY
 
-* **Quarterly data**: Use YYYYQ (2020Q1)
+- **Quarterly data**: Use YYYYQ (2020Q1)
 
-* **Monthly data**: Use YYYM (2020M01)
+- **Monthly data**: Use YYYM (2020M01)
 
 # Downloading Data: Core Workflow
 
@@ -164,11 +146,30 @@ africa_data <- wb_data(indicator = my_indicators, country = my_countries, start_
  glimpse(africa_data) # displays column types and units
 ```
 
-## Using WDI (Classic)
+## Filtering by Region or Income Group
 
 ```{r}
-wdi_data <- WDI(indicator = c(gdp_per_capita = "NY.GDP.PCAP.KD", inflation = "FP.CPI.TOTL.ZG"), country = c("ZA","NG","KE","GH","EG"), start = 2000, end = 2023)
+# Retrieve country metadata
+country_info <- wb_countries()
 
-head(wdi_data)
+# Extract ISO3 codes for Sub - Saharan Africa
+ssa_countries <- country_info %>%
+filter(region == "Sub-Saharan Africa") %>%
+pull(iso3c)
+
+# Download GDP per capita for all SSA countries
+ssa_data <- wb_data (indicator = c(gdp_pc = "NY.GDP.PCAP.KD"), country = ssa_countries, start_date = 2000, end_date = 2022)
+# Approximately 48 countries 23 years = ~1 ,104 observations
 ```
 
+## Understanding The Returned Dataframe
+
+wbstats returns a tidy dataframe where each row corresponds to one country-year observation. Key columns include:
+
+```{r}
+# Summarise missing values across all columns
+africa_data %>% summarise(across(everything(), ~ sum(is.na(.))))
+
+# Note : Missing data often reflects non - reporting , which may correlate with
+# institutional quality . Consider the implications for your analysis .
+```
